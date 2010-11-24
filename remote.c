@@ -22,12 +22,12 @@
 
 enum MODES {
 	INTERVALOMETER = 0,
-	REMOTE
+	REMOTE = 1
 } mode = REMOTE;
 
 enum CAMERA_TYPES {
 	NIKON = 0,
-	CANON
+	CANON = 1
 } camera_type = NIKON;
 
 
@@ -208,7 +208,10 @@ int main() {
 			//Check mode switch
 			if ((PINC & (1<<PC2)) == 0)
 				mode = REMOTE;
+			 else 
+				mode = INTERVALOMETER;
 			
+
 			if (mode == REMOTE) {
 				click();
 				printf_P(PSTR("CLICK_REMOTE\n"));
@@ -221,13 +224,19 @@ int main() {
 				mode = INTERVALOMETER;
 				
 				timer_interval = get_interval();
+
 				printf_P(PSTR("TIMER_INTERVAL = %u ms\n"), timer_interval);
 				
 				while (1) {
 					click();
 					printf_P(PSTR("CLICK_INTERVALOMETER\n"));
 					
-					printf_P(PSTR("Waiting for %u ms\n"), timer_interval);	
+					//printf_P(PSTR("Waiting for %u ms\n"), timer_interval);
+					if((timer_interval / 1000) <60) {
+						printf_P(PSTR("Waiting for %u seconds\n"), timer_interval / 1000);
+					} else {
+						printf_P(PSTR("Waiting for %u minutes\n"), (timer_interval / 1000) / 60);
+					}	
 					delay_ms(timer_interval);
 				}
 			}
