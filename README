@@ -1,4 +1,6 @@
-The code in this project is heavily influenced by the Josh Davis's code found at http://thedavisblog.com/blog/?p=708
+The code in this project is heavily influenced by Josh Davis's code found at http://thedavisblog.com/blog/?p=708
+
+To change camera types, change the mode variable from NIKON to CANON.
 
 ----------------README FROM ORIGINAL AUTHER----------------
 Nerdkit Intervalometer
