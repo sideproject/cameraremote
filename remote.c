@@ -20,6 +20,12 @@
 // PC2 -- Mode switch
 // PC0 -- Potentiometer for selecting interval
 
+#define TRIGGER_PIN 		PC5
+#define IR_LED_PIN 			PC4
+#define INDICATOR_LED_PIN 	PC3
+#define MODE_SWITCH_PIN 	PC2
+#define POTENTIOMETER_PIN 	PC0
+
 enum MODES {
 	INTERVALOMETER = 0,
 	REMOTE = 1
@@ -108,9 +114,9 @@ void pulse_32k(){
 	// [ 30.581us ~= 31us ]
 	// [increase 31us to 32us to divide by 2 evenly ]
 	// [ 32us / 2 = 16us ]
-	PORTC |= (1<<PC4);		//ON
+	PORTC |= (1 << IR_LED_PIN);		//ON
 	delay_us(16);
-	PORTC &= ~(1<<PC4);	//OFF
+	PORTC &= ~(1 << IR_LED_PIN);	//OFF
 	delay_us(16);
 }
 
@@ -119,9 +125,9 @@ void pulse_38k() {
 	// [ 1 / 38400 = 2.60416666EE-5s]
 	// [ 2.6041666EE-5s ~= 26us ]
 	// [ 26us / 2 = 13 us]
-	PORTC |= (1<<PC4);		//ON
+	PORTC |= (1 << IR_LED_PIN);		//ON
 	delay_us(13);
-	PORTC &= ~(1<<PC4);	//OFF
+	PORTC &= ~(1 << IR_LED_PIN);	//OFF
 	delay_us(13);
 }
 
@@ -135,7 +141,7 @@ void pulse_38k_ms(uint16_t us) { 	//max us=65535 (2 ^ 16)
 
 void nikon_click() {
 	//send the shutter release signal to the camera [---NIKON CAMERAS---]
-	PORTC |= (1<<PC3); // turn on indicator LED
+	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
 	
 	// Fire Pattern Twice with IR LED
 	uint8_t j;
@@ -150,13 +156,13 @@ void nikon_click() {
 		pulse_38k_ms(390);   	//- Receive the last pulse (400 usec) [400 / 26 = 15.3 -> 390 / 26 = 15]
 		delay_us(63200); 		//The same waveform is repeated a second time after about 63,2 msec.
 	}
-	PORTC &= ~(1 << PC3); //turn off indicator LED
+	PORTC &= ~(1 << INDICATOR_LED_PIN); //turn off indicator LED
 }
 
 void canon_click(){
 	//send the shutter release signal to the camera [---CANON CAMERAS---]
 	//This pattern is untested because I didn't have a Canon camera to use, but according to online documentation this *should* work for a Canon camera that has IR remote capabilities.
-	PORTC |= (1<<PC3); // turn on indicator LED
+	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
 	
 	uint8_t j, k;
 	// Fire Pattern Twice with IR LED
@@ -165,7 +171,7 @@ void canon_click(){
 		delay_ms(7.21); 					// pause 7.21 ms
 		for (k = 0; k < 16; k++) pulse_32k();	//16 pulses @ 32KHz
 	}
-	PORTC &= ~(1<<PC3); //turn off indicator LED
+	PORTC &= ~(1 << INDICATOR_LED_PIN); //turn off indicator LED
 }
 
 void click() {
@@ -180,63 +186,55 @@ int main() {
 	long int timer_interval;
 
 	// LEDs as outputs
-	DDRC |= (1<<PC4);	//IR LED
-	DDRC |= (1<<PC3);	//Indicator LED
+	DDRC |= (1 << IR_LED_PIN);
+	DDRC |= (1 << INDICATOR_LED_PIN);
 
 	//enable internal pullup resistors
-	PORTC |= (1<<PC5);	// button
-	PORTC |= (1<<PC2); // mode switch
-	PORTC |= (1<<PC0); // interval potentiometer
+	PORTC |= (1 << TRIGGER_PIN);
+	PORTC |= (1 << MODE_SWITCH_PIN);
+	PORTC |= (1 << POTENTIOMETER_PIN);
 
 	adc_init();
-
+	
 	//start up the serial port
 	uart_init();
 	FILE uart_stream = FDEV_SETUP_STREAM(uart_putchar, uart_getchar, _FDEV_SETUP_RW);
 	stdin = stdout = &uart_stream;
-	//allow time to initialize
-	delay_ms(100);
 	
-	printf_P(PSTR("STARTING\n"));
-
-	// loop forever!
+	printf_P(PSTR("STARTING\r\n"));
 	while (1) {
-		
 		//Wait for button press
-		if ((PINC & (1<<PC5)) == 0) {
+		if ((PINC & (1 << TRIGGER_PIN)) == 0) {
 			
 			//Check mode switch
-			if ((PINC & (1<<PC2)) == 0)
+			if ((PINC & (1 << MODE_SWITCH_PIN)) == 0)
 				mode = REMOTE;
 			 else 
 				mode = INTERVALOMETER;
-			
 
 			if (mode == REMOTE) {
 				click();
-				printf_P(PSTR("CLICK_REMOTE\n"));
+				printf_P(PSTR("CLICK_REMOTE\r\n"));
 
 				//debounce
 				delay_ms(1000);
 			
 			} else if (mode == INTERVALOMETER) {
-				printf_P(PSTR("INTERVALOMETER_START\n"));
+				printf_P(PSTR("INTERVALOMETER_START\r\n"));
 				mode = INTERVALOMETER;
 				
 				timer_interval = get_interval();
-
-				printf_P(PSTR("TIMER_INTERVAL = %u ms\n"), timer_interval);
+				printf_P(PSTR("TIMER_INTERVAL = %u ms\r\n"), timer_interval);
 				
 				while (1) {
 					click();
-					printf_P(PSTR("CLICK_INTERVALOMETER\n"));
+					printf_P(PSTR("CLICK_INTERVALOMETER\r\n"));
 					
-					//printf_P(PSTR("Waiting for %u ms\n"), timer_interval);
-					if((timer_interval / 1000) <60) {
-						printf_P(PSTR("Waiting for %u seconds\n"), timer_interval / 1000);
-					} else {
-						printf_P(PSTR("Waiting for %u minutes\n"), (timer_interval / 1000) / 60);
-					}	
+					if ((timer_interval / 1000) < 60) 
+						printf_P(PSTR("Waiting for %u seconds\r\n"), timer_interval / 1000);
+					else 
+						printf_P(PSTR("Waiting for %u minutes\r\n"), (timer_interval / 1000) / 60);
+					
 					delay_ms(timer_interval);
 				}
 			}
