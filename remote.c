@@ -83,28 +83,38 @@ uint16_t get_sample() {
 	return sample_avg;
 }
 
-long int get_interval() {
+long int account_for_slow_clock(long int ms) {
+	
+	long int us = ms * 1000;	//convert to us
+	us = us - (us * 0.017);		//account for slow clock
+	return us / 1000;			//convert back to ms
+}
+
+
+long int get_interval_ms() {
 	long int interval = 0;
 	uint16_t sample = get_sample();
 
-	//Decide on the interval time.  The Nerdkits crystal makes a clock that is a tiny bit
-	//slow (1 usec = 1.017 usec), so I adjusted the interval times accordingly.
+	//Decide on the interval time.
 	if (sample <= 128) 
-		interval = 14000; 	// 15 sec
+		interval = 15000; 	// 15 ses
 	 else if (sample <= 256) 
-		interval = 28000; 	// 30 sec
+		interval = 30000; 	// 30 sec
 	 else if (sample <= 384) 
-		interval = 58997; 	// 1 min
+		interval = 60000; 	// 1 min
 	 else if (sample <= 512) 
-		interval = 117994; 	// 2 min
+		interval = 120000; 	// 2 min
 	 else if (sample <= 640) 
-		interval = 176991; 	// 3 min
+		interval = 180000; 	// 3 min
 	 else if (sample <= 768) 
-		interval = 294985; 	// 5 min
+		interval = 300000; 	// 5 min
 	 else if (sample <= 896) 
-		interval = 589970; 	// 10 min
+		interval = 600000; 	// 10 min
 	 else 
-		interval = 884955; 	// 15 min
+		interval = 900000; 	// 15 min
+	 
+	//The Nerdkits crystal makes a clock that is a tiny bit slow (1 usec = 1.017 usec)
+	interval = account_for_slow_clock(interval);
 	
 	return interval;
 }
@@ -182,7 +192,7 @@ void click() {
 }
 
 int main() {
-	long int timer_interval = 0;
+	long int timer_interval = 0L;
 
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
@@ -222,7 +232,7 @@ int main() {
 				printf_P(PSTR("INTERVALOMETER_START\r\n"));
 				mode = INTERVALOMETER;
 				
-				timer_interval = get_interval();
+				timer_interval = get_interval_ms();
 				printf_P(PSTR("TIMER_INTERVAL = %u ms\r\n"), timer_interval);
 				
 				while (1) {
