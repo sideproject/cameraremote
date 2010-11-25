@@ -1,6 +1,7 @@
 // remote.c
 // for NerdKits with ATmega168
-// use with Nikon cameras
+// use with Nikon (and possibly Canon) cameras
+// NOTE: this file best viewed with 1 tab set to 4 spaces
 
 #define F_CPU 14745600
 
@@ -37,26 +38,23 @@ enum CAMERA_TYPES {
 } camera_type = NIKON;
 
 
-void adc_init() {
-	// set analog to digital converter
-	// for external reference (5v), single ended input ADC0
-	ADMUX = 0;
+void adc_init(uint8_t pin) {
+	// set analog to digital converter for external reference (5v), single ended input ADC0
+	//ADMUX = 0;
+	ADMUX = pin;
 
-	// set analog to digital converter
-	// to be enabled, with a clock prescale of 1/128
+	// set analog to digital converter to be enabled, with a clock prescale of 1/128
 	// so that the ADC clock runs at 115.2kHz.
-	ADCSRA = (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
 
 	// fire a conversion just to get the ADC warmed up
-	ADCSRA |= (1<<ADSC);
+	ADCSRA |= (1 << ADSC);
 }
 
 uint16_t adc_read() {
-	// read from ADC, waiting for conversion to finish
-	// (assumes someone else asked for a conversion.)
-	// wait for it to be cleared
-	while (ADCSRA & (1<<ADSC)) {
-		// do nothing... just hold your breath.
+	// read from ADC, waiting for conversion to finish (assumes someone else asked for a conversion.)
+	while (ADCSRA & (1 << ADSC)) {
+		// wait for bit to be cleared
 	}
 	// bit is cleared, so we have a result.
 
@@ -71,18 +69,23 @@ uint16_t adc_read() {
 	return result;
 }
 
+uint16_t get_sample() {
 
-long int get_interval() {
-	double sample;
-	long int interval;
-	uint8_t i, sample_avg;
-
+	uint16_t sample_avg = 0;
+	uint16_t sample = 0;
+	uint8_t i = 0;
+	
 	// take 100 samples and average them
 	for (i=0; i<100; i++) {
 		sample = adc_read();
-		// add this contribution to the average
 		sample_avg = sample_avg + (sample / 100);
 	}
+	return sample_avg;
+}
+
+long int get_interval() {
+	long int interval = 0;
+	uint16_t sample = get_sample();
 
 	//Decide on the interval time.  The Nerdkits crystal makes a clock that is a tiny bit
 	//slow (1 usec = 1.017 usec), so I adjusted the interval times accordingly.
@@ -108,7 +111,7 @@ long int get_interval() {
 
 
 void pulse_32k(){
-	//this function pulses the LED at 32.7KHz
+	//this function pulses the LED once at 32.7KHz
 	// [ 1/ 32700 = 3.0581EE-5 ]
 	// [ 3.0581EE-5 = 0.000030581 ]
 	// [ 30.581us ~= 31us ]
@@ -133,20 +136,16 @@ void pulse_38k() {
 
 void pulse_38k_ms(uint16_t us) { 	//max us=65535 (2 ^ 16)
 	uint16_t times = us / 26; 		// one pulse takes 26us -> 13us on and 13us off
-	uint16_t i;
+	uint16_t i = 0;
 	for (i = 0; i < times; i++)
 		pulse_38k();
 }
 
-
 void nikon_click() {
 	//send the shutter release signal to the camera [---NIKON CAMERAS---]
-	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
-	
 	// Fire Pattern Twice with IR LED
-	uint8_t j;
+	uint8_t j = 0;
 	for (j = 0; j < 2; j++) {
-		//MCU timer is slow 1us (MCU) = 1.017us (ACTUAL) --
 		pulse_38k_ms(2002);   	//Wait for a start pulse (2000 usec)  [2000 / 26 = 76.9 -> 2002 / 26 = 77]
 		delay_us(27830); 		//- There must be no pulse for 27830 usec (pause)
 		pulse_38k_ms(390);   	//- Receive a pulse (390 usec) [390 / 26 = 15]
@@ -156,34 +155,34 @@ void nikon_click() {
 		pulse_38k_ms(390);   	//- Receive the last pulse (400 usec) [400 / 26 = 15.3 -> 390 / 26 = 15]
 		delay_us(63200); 		//The same waveform is repeated a second time after about 63,2 msec.
 	}
-	PORTC &= ~(1 << INDICATOR_LED_PIN); //turn off indicator LED
 }
 
 void canon_click(){
 	//send the shutter release signal to the camera [---CANON CAMERAS---]
-	//This pattern is untested because I didn't have a Canon camera to use, but according to online documentation this *should* work for a Canon camera that has IR remote capabilities.
-	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
-	
-	uint8_t j, k;
+	//This pattern is untested because I didn't have a Canon camera to use, but according to online 
+	//documentation this *should* work for a Canon camera that has IR remote capabilities.
+	uint8_t i, j = 0;
 	// Fire Pattern Twice with IR LED
-	for (j = 0; j < 2; j++) {
-		for (k = 0; k < 16; k++) pulse_32k();	//16 pulses @ 32KHz
+	for (i = 0; i < 2; i++) {
+		for (j = 0; j < 16; j++) pulse_32k();	//16 pulses @ 32KHz
 		delay_ms(7.21); 					// pause 7.21 ms
-		for (k = 0; k < 16; k++) pulse_32k();	//16 pulses @ 32KHz
+		for (j = 0; j < 16; j++) pulse_32k();		//16 pulses @ 32KHz
 	}
-	PORTC &= ~(1 << INDICATOR_LED_PIN); //turn off indicator LED
 }
 
 void click() {
-	if (camera_type == NIKON) 
+	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
+
+	if (camera_type == NIKON)
 		nikon_click();
 	else if (camera_type == CANON)
 		canon_click();
+
+	PORTC &= ~(1 << INDICATOR_LED_PIN); //turn off indicator LED
 }
 
-
 int main() {
-	long int timer_interval;
+	long int timer_interval = 0;
 
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
@@ -194,7 +193,7 @@ int main() {
 	PORTC |= (1 << MODE_SWITCH_PIN);
 	PORTC |= (1 << POTENTIOMETER_PIN);
 
-	adc_init();
+	adc_init(0); //use PC0 for ADC conversion (Potentiometer)
 	
 	//start up the serial port
 	uart_init();
