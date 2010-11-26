@@ -15,3 +15,7 @@ remote.ass:	remote.hex
 	
 remote-upload:	remote.hex
 	avrdude ${AVRDUDEFLAGS} -U flash:w:remote.hex:a
+
+clean:
+	rm *.o
+	rm *.hex
