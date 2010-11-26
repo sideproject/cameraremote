@@ -39,6 +39,20 @@ enum CAMERA_TYPES {
 	CANON = 1
 } camera_type = NIKON;
 
+// the_time will store the elapsed time in hundredths of a second.
+// (100 = 1 second)
+// 
+// This variable is marked "volatile" because it is modified
+// by an interrupt handler.  Without the "volatile" marking,
+// the compiler might just assume that it doesn't change in 
+// the flow of any given function (if the compiler doesn't
+// see any code in that function modifying it -- sounds 
+// reasonable, normally!).
+//
+// But with "volatile", it will always read it from memory 
+// instead of making that assumption.
+volatile int32_t the_time;
+int32_t timer_interval_ms = 0;
 
 void realtimeclock_setup() {
   // setup Timer0:
@@ -57,31 +71,15 @@ void realtimeclock_setup() {
   TIMSK0 |= (1<<OCIE0A);
 }
 
-// the_time will store the elapsed time in hundredths of a second.
-// (100 = 1 second)
-// 
-// This variable is marked "volatile" because it is modified
-// by an interrupt handler.  Without the "volatile" marking,
-// the compiler might just assume that it doesn't change in 
-// the flow of any given function (if the compiler doesn't
-// see any code in that function modifying it -- sounds 
-// reasonable, normally!).
-//
-// But with "volatile", it will always read it from memory 
-// instead of making that assumption.
-volatile int32_t the_time;
-int32_t timer_interval_ms = 0;
-
 SIGNAL(SIG_OUTPUT_COMPARE0A) {
   // when Timer0 gets to its Output Compare value,
   // one one-hundredth of a second has elapsed (0.01 seconds).
-  the_time++;
-  //mul by 10 because counter counts .01 seconds and timer_interval_ms i in ms (.001)
-  if ((the_time*10) >= timer_interval_ms ) {
+  the_time += 10; //add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
+  if (the_time >= timer_interval_ms) {
 	the_time = 0;
 	click();
+    printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
   }
-  //printf_P(PSTR("Tick %u ms\r\n"), the_time);
 }
 
 
@@ -163,16 +161,6 @@ uint32_t get_interval_ms() {
 	 else 
 		interval = 900000u; 	// 15 min
 
-	//#ifdef DEBUG
-	//printf_P(PSTR("Actual Inverval: %lu ms\r\n"), interval);
-	//#endif
-	 
-	//The Nerdkits crystal makes a clock that is a tiny bit slow (1 usec = 1.017 usec)
-	//interval = account_for_slow_clock(interval);
-	 
-	//#ifdef DEBUG
-	//printf_P(PSTR("Converted Interval: %lu ms\r\n"), interval);
-	//#endif
 	return interval;
 }
 
@@ -238,7 +226,6 @@ void canon_click(){
 }
 
 void click() {
-
 	printf_P(PSTR("CLICK()\r\n"));
 
 	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
@@ -269,6 +256,7 @@ int main() {
 	uart_init();
 	FILE uart_stream = FDEV_SETUP_STREAM(uart_putchar, uart_getchar, _FDEV_SETUP_RW);
 	stdin = stdout = &uart_stream;
+	delay_ms(333);
 	
 	printf_P(PSTR("STARTING\r\n"));
 
@@ -290,46 +278,16 @@ int main() {
 				delay_ms(1000);
 			
 			} else if (mode == INTERVALOMETER) {
-				printf_P(PSTR("INTERVALOMETER_START\r\n"));
 				
 				timer_interval_ms = get_interval_ms();
+				printf_P(PSTR("INTERVALOMETER_START: %lu ms\r\n"), timer_interval_ms);
 				
 				click();
+				
 				realtimeclock_setup();
 				sei(); //turn on interrupt handler
 
-				while(1) {
-				/*
-					click();
-				
-					#ifdef DEBUG
-					printf_P(PSTR("CLICK_INTERVALOMETER\r\n"));
-					printf_P(PSTR("TIMER_INTERVAL = %lu ms\r\n"), timer_interval_ms);
-					
-					if ((timer_interval_ms / 1000) < 60) 
-						printf_P(PSTR("Waiting for %lu seconds\r\n"), timer_interval_ms / 1000);
-					else 
-						printf_P(PSTR("Waiting for %lu minutes\r\n"), (timer_interval_ms / 1000) / 60);
-					#endif
-
-					uint8_t segments = timer_interval_ms / 65535;
-					#ifdef DEBUG
-					printf_P(PSTR("Segments %u\r\n"), segments);
-					#endif
-					
-					uint16_t overflow = timer_interval_ms % 65535;					
-					#ifdef DEBUG
-					printf_P(PSTR("Overflow %u\r\n"), overflow);
-					#endif
-					
-					uint8_t i;
-					for (i = 0; i < segments; i++) {
-						delay_ms(65535);
-					}
-					delay_ms(overflow);
-					//delay_ms(timer_interval_ms);
-				*/
-				}
+				while(1) {	}
 			}
 		}
 	}
