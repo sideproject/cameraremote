@@ -83,39 +83,45 @@ uint16_t get_sample() {
 	return sample_avg;
 }
 
-long int account_for_slow_clock(long int ms) {
-	
-	long int us = ms * 1000;	//convert to us
+unsigned int account_for_slow_clock(unsigned int ms) {
+	//printf_P(PSTR("1Converting %lu ms\r\n"), ms);
+	unsigned int us = ms * 1000;	//convert to us
+	//printf_P(PSTR("2Converting %lu us\r\n"), us);
 	us = us - (us * 0.017);		//account for slow clock
+	//printf_P(PSTR("3Converting %lu us\r\n"), us);
+	//printf_P(PSTR("4Converting %lu ms\r\n"), us/1000);
 	return us / 1000;			//convert back to ms
 }
 
 
-long int get_interval_ms() {
-	long int interval = 0;
+unsigned int get_interval_ms() {
+	unsigned int interval = 0;
 	uint16_t sample = get_sample();
 
 	//Decide on the interval time.
 	if (sample <= 128) 
-		interval = 15000; 	// 15 ses
+		interval = 15000u; 	// 15 ses
 	 else if (sample <= 256) 
-		interval = 30000; 	// 30 sec
+		interval = 30000u; 	// 30 sec
 	 else if (sample <= 384) 
-		interval = 60000; 	// 1 min
+		interval = 60000u; 	// 1 min
 	 else if (sample <= 512) 
-		interval = 120000; 	// 2 min
+		interval = 120000U; 	// 2 min
 	 else if (sample <= 640) 
-		interval = 180000; 	// 3 min
+		interval = 180000u; 	// 3 min
 	 else if (sample <= 768) 
-		interval = 300000; 	// 5 min
+		interval = 300000u; 	// 5 min
 	 else if (sample <= 896) 
-		interval = 600000; 	// 10 min
+		interval = 600000u; 	// 10 min
 	 else 
-		interval = 900000; 	// 15 min
+		interval = 900000u; 	// 15 min
+
+	printf_P(PSTR("Actual Inverval: %lu ms\r\n"), interval);
 	 
 	//The Nerdkits crystal makes a clock that is a tiny bit slow (1 usec = 1.017 usec)
 	interval = account_for_slow_clock(interval);
-	
+	 
+	printf_P(PSTR("Converted Interval: %lu ms\r\n"), interval);
 	return interval;
 }
 
@@ -192,7 +198,7 @@ void click() {
 }
 
 int main() {
-	long int timer_interval = 0L;
+	unsigned int timer_interval_ms = 0;
 
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
@@ -232,19 +238,30 @@ int main() {
 				printf_P(PSTR("INTERVALOMETER_START\r\n"));
 				mode = INTERVALOMETER;
 				
-				timer_interval = get_interval_ms();
-				printf_P(PSTR("TIMER_INTERVAL = %u ms\r\n"), timer_interval);
+				timer_interval_ms = get_interval_ms();
 				
 				while (1) {
 					click();
 					printf_P(PSTR("CLICK_INTERVALOMETER\r\n"));
+					printf_P(PSTR("TIMER_INTERVAL = %lu ms\r\n"), timer_interval_ms);
 					
-					if ((timer_interval / 1000) < 60) 
-						printf_P(PSTR("Waiting for %u seconds\r\n"), timer_interval / 1000);
+					if ((timer_interval_ms / 1000) < 60) 
+						printf_P(PSTR("Waiting for %lu seconds\r\n"), timer_interval_ms / 1000);
 					else 
-						printf_P(PSTR("Waiting for %u minutes\r\n"), (timer_interval / 1000) / 60);
+						printf_P(PSTR("Waiting for %lu minutes\r\n"), (timer_interval_ms / 1000) / 60);
 					
-					delay_ms(timer_interval);
+					uint8_t segments = timer_interval_ms / 65535;
+					printf_P(PSTR("Segments %u\r\n"), segments);
+					
+					uint16_t overflow = timer_interval_ms % 65535;					
+					printf_P(PSTR("Overflow %u\r\n"), overflow);
+					
+					uint8_t i;
+					for (i = 0; i < segments; i++) {
+						delay_ms(65535);
+					}
+					delay_ms(overflow);
+					//delay_ms(timer_interval_ms);
 				}
 			}
 		}
