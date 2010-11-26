@@ -41,45 +41,45 @@ enum CAMERA_TYPES {
 
 // the_time will store the elapsed time in hundredths of a second.
 // (100 = 1 second)
-// 
+//
 // This variable is marked "volatile" because it is modified
 // by an interrupt handler.  Without the "volatile" marking,
-// the compiler might just assume that it doesn't change in 
+// the compiler might just assume that it doesn't change in
 // the flow of any given function (if the compiler doesn't
-// see any code in that function modifying it -- sounds 
+// see any code in that function modifying it -- sounds
 // reasonable, normally!).
 //
-// But with "volatile", it will always read it from memory 
+// But with "volatile", it will always read it from memory
 // instead of making that assumption.
 volatile int32_t the_time;
 int32_t timer_interval_ms = 0;
 
 void realtimeclock_setup() {
-  // setup Timer0:
-  // CTC (Clear Timer on Compare Match mode)
-  // TOP set by OCR0A register
-  TCCR0A |= (1<<WGM01);
-  // clocked from CLK/1024
-  // which is 14745600/1024, or 14400 increments per second
-  TCCR0B |= (1<<CS02) | (1<<CS00);
-  // set TOP to 143
-  // because it counts 0, 1, 2, ... 142, 143, 0, 1, 2 ...
-  // so 0 through 143 equals 144 events
-  OCR0A = 143;
-  // enable interrupt on compare event
-  // (14400 / 144 = 100 per second)
-  TIMSK0 |= (1<<OCIE0A);
+	// setup Timer0:
+	// CTC (Clear Timer on Compare Match mode)
+	// TOP set by OCR0A register
+	TCCR0A |= (1<<WGM01);
+	// clocked from CLK/1024
+	// which is 14745600/1024, or 14400 increments per second
+	TCCR0B |= (1<<CS02) | (1<<CS00);
+	// set TOP to 143
+	// because it counts 0, 1, 2, ... 142, 143, 0, 1, 2 ...
+	// so 0 through 143 equals 144 events
+	OCR0A = 143;
+	// enable interrupt on compare event
+	// (14400 / 144 = 100 per second)
+	TIMSK0 |= (1<<OCIE0A);
 }
 
 SIGNAL(SIG_OUTPUT_COMPARE0A) {
-  // when Timer0 gets to its Output Compare value,
-  // one one-hundredth of a second has elapsed (0.01 seconds).
-  the_time += 10; //add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
-  if (the_time >= timer_interval_ms) {
-	the_time = 0;
-	click();
-    printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
-  }
+	// when Timer0 gets to its Output Compare value,
+	// one one-hundredth of a second has elapsed (0.01 seconds).
+	the_time += 10; //add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
+	if (the_time >= timer_interval_ms) {
+		the_time = 0;
+		click();
+		printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
+	}
 }
 
 
@@ -119,7 +119,7 @@ uint16_t get_sample() {
 	uint16_t sample_avg = 0;
 	uint16_t sample = 0;
 	uint8_t i = 0;
-	
+
 	// take 100 samples and average them
 	for (i=0; i<100; i++) {
 		sample = adc_read();
@@ -144,28 +144,28 @@ uint32_t get_interval_ms() {
 	uint16_t sample = get_sample();
 
 	//Decide on the interval time.
-	if (sample <= 128) 
+	if (sample <= 128)
 		interval = 15000u; 	// 15 ses
-	 else if (sample <= 256) 
+	else if (sample <= 256)
 		interval = 30000u; 	// 30 sec
-	 else if (sample <= 384) 
+	else if (sample <= 384)
 		interval = 60000u; 	// 1 min
-	 else if (sample <= 512) 
+	else if (sample <= 512)
 		interval = 120000U; 	// 2 min
-	 else if (sample <= 640) 
+	else if (sample <= 640)
 		interval = 180000u; 	// 3 min
-	 else if (sample <= 768) 
+	else if (sample <= 768)
 		interval = 300000u; 	// 5 min
-	 else if (sample <= 896) 
+	else if (sample <= 896)
 		interval = 600000u; 	// 10 min
-	 else 
+	else
 		interval = 900000u; 	// 15 min
 
 	return interval;
 }
 
 
-void pulse_32k(){
+void pulse_32k() {
 	//this function pulses the LED once at 32.7KHz
 	// [ 1/ 32700 = 3.0581EE-5 ]
 	// [ 3.0581EE-5 = 0.000030581 ]
@@ -212,9 +212,9 @@ void nikon_click() {
 	}
 }
 
-void canon_click(){
+void canon_click() {
 	//send the shutter release signal to the camera [---CANON CAMERAS---]
-	//This pattern is untested because I didn't have a Canon camera to use, but according to online 
+	//This pattern is untested because I didn't have a Canon camera to use, but according to online
 	//documentation this *should* work for a Canon camera that has IR remote capabilities.
 	uint8_t i, j = 0;
 	// Fire Pattern Twice with IR LED
@@ -251,23 +251,23 @@ int main() {
 	PORTC |= (1 << POTENTIOMETER_PIN);
 
 	adc_init(0); //use PC0 for ADC conversion (Potentiometer)
-	
+
 	//start up the serial port
 	uart_init();
 	FILE uart_stream = FDEV_SETUP_STREAM(uart_putchar, uart_getchar, _FDEV_SETUP_RW);
 	stdin = stdout = &uart_stream;
 	delay_ms(333);
-	
+
 	printf_P(PSTR("STARTING\r\n"));
 
 	while (1) {
 		//Wait for button press
 		if ((PINC & (1 << TRIGGER_PIN)) == 0) {
-			
+
 			//Check mode switch
 			if ((PINC & (1 << MODE_SWITCH_PIN)) == 0)
 				mode = REMOTE;
-			 else 
+			else
 				mode = INTERVALOMETER;
 
 			if (mode == REMOTE) {
@@ -276,18 +276,18 @@ int main() {
 
 				//debounce
 				delay_ms(1000);
-			
+
 			} else if (mode == INTERVALOMETER) {
-				
+
 				timer_interval_ms = get_interval_ms();
 				printf_P(PSTR("INTERVALOMETER_START: %lu ms\r\n"), timer_interval_ms);
-				
+
 				click();
-				
+
 				realtimeclock_setup();
 				sei(); //turn on interrupt handler
 
-				while(1) {	}
+				while (1) {	}
 			}
 		}
 	}
