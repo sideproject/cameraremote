@@ -14,6 +14,8 @@
 #include "../libnerdkits/delay.h"
 #include "../libnerdkits/uart.h"
 
+void click();
+
 // PIN DEFINITIONS:
 // PC5 -- trigger button (pulled to ground when pressed)
 // PC4 -- IR LED anode
@@ -36,6 +38,51 @@ enum CAMERA_TYPES {
 	NIKON = 0,
 	CANON = 1
 } camera_type = NIKON;
+
+
+void realtimeclock_setup() {
+  // setup Timer0:
+  // CTC (Clear Timer on Compare Match mode)
+  // TOP set by OCR0A register
+  TCCR0A |= (1<<WGM01);
+  // clocked from CLK/1024
+  // which is 14745600/1024, or 14400 increments per second
+  TCCR0B |= (1<<CS02) | (1<<CS00);
+  // set TOP to 143
+  // because it counts 0, 1, 2, ... 142, 143, 0, 1, 2 ...
+  // so 0 through 143 equals 144 events
+  OCR0A = 143;
+  // enable interrupt on compare event
+  // (14400 / 144 = 100 per second)
+  TIMSK0 |= (1<<OCIE0A);
+}
+
+// the_time will store the elapsed time in hundredths of a second.
+// (100 = 1 second)
+// 
+// This variable is marked "volatile" because it is modified
+// by an interrupt handler.  Without the "volatile" marking,
+// the compiler might just assume that it doesn't change in 
+// the flow of any given function (if the compiler doesn't
+// see any code in that function modifying it -- sounds 
+// reasonable, normally!).
+//
+// But with "volatile", it will always read it from memory 
+// instead of making that assumption.
+volatile int32_t the_time;
+int32_t timer_interval_ms = 0;
+
+SIGNAL(SIG_OUTPUT_COMPARE0A) {
+  // when Timer0 gets to its Output Compare value,
+  // one one-hundredth of a second has elapsed (0.01 seconds).
+  the_time++;
+  //mul by 10 because counter counts .01 seconds and timer_interval_ms i in ms (.001)
+  if ((the_time*10) >= timer_interval_ms ) {
+	the_time = 0;
+	click();
+  }
+  //printf_P(PSTR("Tick %u ms\r\n"), the_time);
+}
 
 
 void adc_init(uint8_t pin) {
@@ -82,20 +129,20 @@ uint16_t get_sample() {
 	}
 	return sample_avg;
 }
-
-unsigned int account_for_slow_clock(unsigned int ms) {
+/*
+uint32_t account_for_slow_clock(uint32_t ms) {
 	//printf_P(PSTR("1Converting %lu ms\r\n"), ms);
-	unsigned int us = ms * 1000;	//convert to us
+	uint32_t us = ms * 1000;	//convert to us
 	//printf_P(PSTR("2Converting %lu us\r\n"), us);
 	us = us - (us * 0.017);		//account for slow clock
 	//printf_P(PSTR("3Converting %lu us\r\n"), us);
 	//printf_P(PSTR("4Converting %lu ms\r\n"), us/1000);
 	return us / 1000;			//convert back to ms
 }
+*/
 
-
-unsigned int get_interval_ms() {
-	unsigned int interval = 0;
+uint32_t get_interval_ms() {
+	uint32_t interval = 0;
 	uint16_t sample = get_sample();
 
 	//Decide on the interval time.
@@ -116,12 +163,16 @@ unsigned int get_interval_ms() {
 	 else 
 		interval = 900000u; 	// 15 min
 
-	printf_P(PSTR("Actual Inverval: %lu ms\r\n"), interval);
+	//#ifdef DEBUG
+	//printf_P(PSTR("Actual Inverval: %lu ms\r\n"), interval);
+	//#endif
 	 
 	//The Nerdkits crystal makes a clock that is a tiny bit slow (1 usec = 1.017 usec)
-	interval = account_for_slow_clock(interval);
+	//interval = account_for_slow_clock(interval);
 	 
-	printf_P(PSTR("Converted Interval: %lu ms\r\n"), interval);
+	//#ifdef DEBUG
+	//printf_P(PSTR("Converted Interval: %lu ms\r\n"), interval);
+	//#endif
 	return interval;
 }
 
@@ -187,6 +238,9 @@ void canon_click(){
 }
 
 void click() {
+
+	printf_P(PSTR("CLICK()\r\n"));
+
 	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
 
 	if (camera_type == NIKON)
@@ -198,7 +252,7 @@ void click() {
 }
 
 int main() {
-	unsigned int timer_interval_ms = 0;
+//	uint32_t timer_interval_ms = 0;
 
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
@@ -217,6 +271,7 @@ int main() {
 	stdin = stdout = &uart_stream;
 	
 	printf_P(PSTR("STARTING\r\n"));
+
 	while (1) {
 		//Wait for button press
 		if ((PINC & (1 << TRIGGER_PIN)) == 0) {
@@ -236,12 +291,18 @@ int main() {
 			
 			} else if (mode == INTERVALOMETER) {
 				printf_P(PSTR("INTERVALOMETER_START\r\n"));
-				mode = INTERVALOMETER;
 				
 				timer_interval_ms = get_interval_ms();
 				
-				while (1) {
+				click();
+				realtimeclock_setup();
+				sei(); //turn on interrupt handler
+
+				while(1) {
+				/*
 					click();
+				
+					#ifdef DEBUG
 					printf_P(PSTR("CLICK_INTERVALOMETER\r\n"));
 					printf_P(PSTR("TIMER_INTERVAL = %lu ms\r\n"), timer_interval_ms);
 					
@@ -249,12 +310,17 @@ int main() {
 						printf_P(PSTR("Waiting for %lu seconds\r\n"), timer_interval_ms / 1000);
 					else 
 						printf_P(PSTR("Waiting for %lu minutes\r\n"), (timer_interval_ms / 1000) / 60);
-					
+					#endif
+
 					uint8_t segments = timer_interval_ms / 65535;
+					#ifdef DEBUG
 					printf_P(PSTR("Segments %u\r\n"), segments);
+					#endif
 					
 					uint16_t overflow = timer_interval_ms % 65535;					
+					#ifdef DEBUG
 					printf_P(PSTR("Overflow %u\r\n"), overflow);
+					#endif
 					
 					uint8_t i;
 					for (i = 0; i < segments; i++) {
@@ -262,6 +328,7 @@ int main() {
 					}
 					delay_ms(overflow);
 					//delay_ms(timer_interval_ms);
+				*/
 				}
 			}
 		}
