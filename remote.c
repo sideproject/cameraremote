@@ -39,8 +39,7 @@ enum CAMERA_TYPES {
 	CANON = 1
 } camera_type = NIKON;
 
-// the_time will store the elapsed time in hundredths of a second.
-// (100 = 1 second)
+// the_time will store the elapsed time in milliseconds (1000 = 1 second)
 //
 // This variable is marked "volatile" because it is modified
 // by an interrupt handler.  Without the "volatile" marking,
@@ -51,42 +50,39 @@ enum CAMERA_TYPES {
 //
 // But with "volatile", it will always read it from memory
 // instead of making that assumption.
-volatile int32_t the_time;
+volatile int32_t the_time_ms;
 int32_t timer_interval_ms = 0;
 
 void realtimeclock_setup() {
 	// setup Timer0:
-	// CTC (Clear Timer on Compare Match mode)
-	// TOP set by OCR0A register
+	//   CTC (Clear Timer on Compare Match mode)
+	//   TOP set by OCR0A register
 	TCCR0A |= (1<<WGM01);
 	// clocked from CLK/1024
 	// which is 14745600/1024, or 14400 increments per second
 	TCCR0B |= (1<<CS02) | (1<<CS00);
-	// set TOP to 143
-	// because it counts 0, 1, 2, ... 142, 143, 0, 1, 2 ...
+	// set TOP to 143 because it counts 0, 1, 2, ... 142, 143, 0, 1, 2 ...
 	// so 0 through 143 equals 144 events
 	OCR0A = 143;
-	// enable interrupt on compare event
-	// (14400 / 144 = 100 per second)
+	// enable interrupt on compare event (14400 / 144 = 100 per second)
 	TIMSK0 |= (1<<OCIE0A);
 }
 
+// when Timer0 gets to its Output Compare value,
+// one one-hundredth of a second has elapsed (0.01 seconds).
 SIGNAL(SIG_OUTPUT_COMPARE0A) {
-	// when Timer0 gets to its Output Compare value,
-	// one one-hundredth of a second has elapsed (0.01 seconds).
-	the_time += 10; //add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
-	if (the_time >= timer_interval_ms) {
-		the_time = 0;
+    //add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
+	the_time_ms += 10; 
+	if (the_time_ms >= timer_interval_ms) {
+		the_time_ms = 0;
 		click();
 		printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
 	}
 }
 
-
-void adc_init(uint8_t pin) {
+void adc_init() {
 	// set analog to digital converter for external reference (5v), single ended input ADC0
-	//ADMUX = 0;
-	ADMUX = pin;
+	ADMUX = 0;
 
 	// set analog to digital converter to be enabled, with a clock prescale of 1/128
 	// so that the ADC clock runs at 115.2kHz.
@@ -145,21 +141,21 @@ uint32_t get_interval_ms() {
 
 	//Decide on the interval time.
 	if (sample <= 128)
-		interval = 15000u; 	// 15 ses
+		interval = 15000; 	// 15 ses
 	else if (sample <= 256)
-		interval = 30000u; 	// 30 sec
+		interval = 30000; 	// 30 sec
 	else if (sample <= 384)
-		interval = 60000u; 	// 1 min
+		interval = 60000; 	// 1 min
 	else if (sample <= 512)
-		interval = 120000U; 	// 2 min
+		interval = 120000; 	// 2 min
 	else if (sample <= 640)
-		interval = 180000u; 	// 3 min
+		interval = 180000; 	// 3 min
 	else if (sample <= 768)
-		interval = 300000u; 	// 5 min
+		interval = 300000; 	// 5 min
 	else if (sample <= 896)
-		interval = 600000u; 	// 10 min
+		interval = 600000; 	// 10 min
 	else
-		interval = 900000u; 	// 15 min
+		interval = 900000; 	// 15 min
 
 	return interval;
 }
@@ -220,8 +216,8 @@ void canon_click() {
 	// Fire Pattern Twice with IR LED
 	for (i = 0; i < 2; i++) {
 		for (j = 0; j < 16; j++) pulse_32k();	//16 pulses @ 32KHz
-		delay_ms(7.21); 					// pause 7.21 ms
-		for (j = 0; j < 16; j++) pulse_32k();		//16 pulses @ 32KHz
+		delay_us(7210);     					//pause 7.21 ms [7.21ms * 1000 = 7210us]
+		for (j = 0; j < 16; j++) pulse_32k();	//16 pulses @ 32KHz
 	}
 }
 
@@ -250,7 +246,7 @@ int main() {
 	PORTC |= (1 << MODE_SWITCH_PIN);
 	PORTC |= (1 << POTENTIOMETER_PIN);
 
-	adc_init(0); //use PC0 for ADC conversion (Potentiometer)
+	adc_init();
 
 	//start up the serial port
 	uart_init();
