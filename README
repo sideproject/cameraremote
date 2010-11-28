@@ -1,15 +1,13 @@
-The code in this project is heavily influenced by Josh Davis's code found at http://thedavisblog.com/blog/?p=708
+Nerdkit Camera Remote
 
-To change camera types, change the mode variable from NIKON to CANON.
+This is the code to control a home-made IR remote for my Nikon D40.  There is code written to handle Canon cameras but it is untested.
 
-----------------README FROM ORIGINAL AUTHER----------------
-Nerdkit Intervalometer
-by Josh Davis
+It can operate in two modes:
+	1. Remote Capture - Take a picture each time the trigger button is pushed
+	2. Intervalometer - Take a picture every X seconds/minutes (time lapse)
 
+CREDIT WHERE CREDIT IS DUE:
+The code and Nerdkit designs used in this project are (very) heavily influenced by Josh Davis's Nerdkit Intervalometer project:
+	Referenced here: http://www.nerdkits.com/forum/thread/338/ 
+	Hosted here: http://thedavisblog.com/blog/?p=708
 
-The Makefile is set up to make a Nikon remote/intervalometer.
-If you want to make the Canon version, replace all the "nikon" with "canon"
-The Canon shutter release pattern is untested so I can't guarantee it will
-work.  Good Luck!
-
-Any suggestions or comments can be forwarded to me at joshosu@gmail.com
