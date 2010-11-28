@@ -19,9 +19,10 @@ void click();
 // PIN DEFINITIONS:
 // PC5 -- trigger button (pulled to ground when pressed)
 // PC4 -- IR LED anode
-// PC3 -- Indicator LED anode
+// PC3 -- Indicator LED anode (turns on when IR LED is flashing)
 // PC2 -- Mode switch
 // PC0 -- Potentiometer for selecting interval
+// PB1 -- Intervaolmeter indicator LED - flashes while waiting for next interval click
 
 #define TRIGGER_PIN 			PC5
 #define IR_LED_PIN 				PC4
