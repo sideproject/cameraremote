@@ -1,10 +1,10 @@
 Nerdkit Camera Remote
 
-This is the code to control a home-made IR remote for my Nikon D40.  There is code written to handle Canon cameras but it is untested.
+This is the code to control a homemade IR remote for my Nikon D40.  There is code written to handle Canon cameras but it is untested.
 
 It can operate in two modes:
 	1. Remote Capture - Take a picture each time the trigger button is pushed
-	2. Intervalometer - Take a picture every X seconds/minutes (time lapse)
+	2. Intervalometer - Take a picture every X seconds/minutes (time-lapse)
 
 CREDIT WHERE CREDIT IS DUE:
 The code and Nerdkit designs used in this project are (very) heavily influenced by Josh Davis's Nerdkit Intervalometer project:
