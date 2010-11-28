@@ -23,11 +23,12 @@ void click();
 // PC2 -- Mode switch
 // PC0 -- Potentiometer for selecting interval
 
-#define TRIGGER_PIN 		PC5
-#define IR_LED_PIN 			PC4
-#define INDICATOR_LED_PIN 	PC3
-#define MODE_SWITCH_PIN 	PC2
-#define POTENTIOMETER_PIN 	PC0
+#define TRIGGER_PIN 			PC5
+#define IR_LED_PIN 				PC4
+#define RED_INDICATOR_LED_PIN 	PC3
+#define GREEN_INDICATOR_LED_PIN	PB1
+#define MODE_SWITCH_PIN 		PC2
+#define POTENTIOMETER_PIN 		PC0
 
 enum MODES {
 	INTERVALOMETER = 0,
@@ -78,6 +79,12 @@ SIGNAL(SIG_OUTPUT_COMPARE0A) {
 		click();
 		printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
 	}
+
+	//while waiting for next intervalometer click, flash a green LED to show it is still on
+	if ((the_time_ms % 5000) == 0) 					//turn on every 5 seconds
+		PORTB |= (1 << GREEN_INDICATOR_LED_PIN); 	
+	else if ((the_time_ms % 250) == 0) 
+    	PORTB &= ~(1 << GREEN_INDICATOR_LED_PIN);  	//turn off after 1/4 of a second
 }
 
 void adc_init() {
@@ -224,22 +231,22 @@ void canon_click() {
 void click() {
 	printf_P(PSTR("CLICK()\r\n"));
 
-	PORTC |= (1 << INDICATOR_LED_PIN); // turn on indicator LED
+	PORTC |= (1 << RED_INDICATOR_LED_PIN); // turn on indicator LED
 
 	if (camera_type == NIKON)
 		nikon_click();
 	else if (camera_type == CANON)
 		canon_click();
 
-	PORTC &= ~(1 << INDICATOR_LED_PIN); //turn off indicator LED
+	PORTC &= ~(1 << RED_INDICATOR_LED_PIN); //turn off indicator LED
 }
 
 int main() {
-//	uint32_t timer_interval_ms = 0;
 
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
-	DDRC |= (1 << INDICATOR_LED_PIN);
+	DDRC |= (1 << RED_INDICATOR_LED_PIN);
+	DDRB |= (1 << GREEN_INDICATOR_LED_PIN);
 
 	//enable internal pullup resistors
 	PORTC |= (1 << TRIGGER_PIN);
