@@ -26,8 +26,8 @@ void click();
 
 #define TRIGGER_PIN 			PC5
 #define IR_LED_PIN 				PC4
-#define RED_INDICATOR_LED_PIN 	PC3
-#define GREEN_INDICATOR_LED_PIN	PB1
+#define IR_INDICATOR_LED_PIN 	PC3
+#define TIMER_INDICATOR_LED_PIN	PB1
 #define MODE_SWITCH_PIN 		PC2
 #define POTENTIOMETER_PIN 		PC0
 
@@ -41,6 +41,7 @@ enum CAMERA_TYPES {
 	CANON = 1
 } camera_type = NIKON;
 
+
 // the_time will store the elapsed time in milliseconds (1000 = 1 second)
 //
 // This variable is marked "volatile" because it is modified
@@ -52,7 +53,7 @@ enum CAMERA_TYPES {
 //
 // But with "volatile", it will always read it from memory
 // instead of making that assumption.
-volatile int32_t the_time_ms;
+volatile int32_t the_time_ms = 0;
 int32_t timer_interval_ms = 0;
 
 void realtimeclock_setup() {
@@ -73,19 +74,8 @@ void realtimeclock_setup() {
 // when Timer0 gets to its Output Compare value,
 // one one-hundredth of a second has elapsed (0.01 seconds).
 SIGNAL(SIG_OUTPUT_COMPARE0A) {
-    //add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
-	the_time_ms += 10; 
-	if (the_time_ms >= timer_interval_ms) {
-		the_time_ms = 0;
-		click();
-		printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
-	}
-
-	//while waiting for next intervalometer click, flash a green LED to show it is still on
-	if ((the_time_ms % 5000) == 0) 					//turn on every 5 seconds
-		PORTB |= (1 << GREEN_INDICATOR_LED_PIN); 	
-	else if ((the_time_ms % 250) == 0) 
-    	PORTB &= ~(1 << GREEN_INDICATOR_LED_PIN);  	//turn off after 1/4 of a second
+	//add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
+	the_time_ms += 10;
 }
 
 void adc_init() {
@@ -193,7 +183,7 @@ void pulse_38k() {
 	delay_us(13);
 }
 
-void pulse_38k_ms(uint16_t us) { 	//max us=65535 (2 ^ 16)
+void pulse_38k_us(uint16_t us) { 	//max us=65535 (2 ^ 16)
 	uint16_t times = us / 26; 		// one pulse takes 26us -> 13us on and 13us off
 	uint16_t i = 0;
 	for (i = 0; i < times; i++)
@@ -205,13 +195,13 @@ void nikon_click() {
 	// Fire Pattern Twice with IR LED
 	uint8_t j = 0;
 	for (j = 0; j < 2; j++) {
-		pulse_38k_ms(2002);   	//Wait for a start pulse (2000 usec)  [2000 / 26 = 76.9 -> 2002 / 26 = 77]
+		pulse_38k_us(2002);   	//Wait for a start pulse (2000 usec)  [2000 / 26 = 76.9 -> 2002 / 26 = 77]
 		delay_us(27830); 		//- There must be no pulse for 27830 usec (pause)
-		pulse_38k_ms(390);   	//- Receive a pulse (390 usec) [390 / 26 = 15]
+		pulse_38k_us(390);   	//- Receive a pulse (390 usec) [390 / 26 = 15]
 		delay_us(1580);  		//- Pause (1580 usec)
-		pulse_38k_ms(416);   	//- Receive a second pulse (410 usec) [410 / 26 = 15.7 -> 416 / 26 = 16]
+		pulse_38k_us(416);   	//- Receive a second pulse (410 usec) [410 / 26 = 15.7 -> 416 / 26 = 16]
 		delay_us(3580);  		//- Longer pause (3580 usec)
-		pulse_38k_ms(390);   	//- Receive the last pulse (400 usec) [400 / 26 = 15.3 -> 390 / 26 = 15]
+		pulse_38k_us(390);   	//- Receive the last pulse (400 usec) [400 / 26 = 15.3 -> 390 / 26 = 15]
 		delay_us(63200); 		//The same waveform is repeated a second time after about 63,2 msec.
 	}
 }
@@ -232,22 +222,22 @@ void canon_click() {
 void click() {
 	printf_P(PSTR("CLICK()\r\n"));
 
-	PORTC |= (1 << RED_INDICATOR_LED_PIN); // turn on indicator LED
+	PORTC |= (1 << IR_INDICATOR_LED_PIN); // turn on indicator LED
 
 	if (camera_type == NIKON)
 		nikon_click();
 	else if (camera_type == CANON)
 		canon_click();
 
-	PORTC &= ~(1 << RED_INDICATOR_LED_PIN); //turn off indicator LED
+	PORTC &= ~(1 << IR_INDICATOR_LED_PIN); //turn off indicator LED
 }
 
 int main() {
 
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
-	DDRC |= (1 << RED_INDICATOR_LED_PIN);
-	DDRB |= (1 << GREEN_INDICATOR_LED_PIN);
+	DDRC |= (1 << IR_INDICATOR_LED_PIN);
+	DDRB |= (1 << TIMER_INDICATOR_LED_PIN);
 
 	//enable internal pullup resistors
 	PORTC |= (1 << TRIGGER_PIN);
@@ -291,7 +281,23 @@ int main() {
 				realtimeclock_setup();
 				sei(); //turn on interrupt handler
 
-				while (1) {	}
+				while (1) {
+
+					if (the_time_ms >= timer_interval_ms) {
+						the_time_ms = 0;
+						click();
+						printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
+					} else {
+						//while waiting for next intervalometer click, flash a green LED to show it is still on
+						if (the_time_ms > 0 && (the_time_ms % 5000 == 0)) {		//turn on every 5 seconds
+							PORTB |= (1 << TIMER_INDICATOR_LED_PIN);
+							delay_ms(200);	//putting delay here is OK since the min time between click()s is 15 seconds (TIMER0 still ticks during this delay)
+							PORTB &= ~(1 << TIMER_INDICATOR_LED_PIN);
+						}
+					}
+					delay_ms(8); 	//TIMER0 ticks every 10ms - wait ~1 tick (nerdkit crystal is slow so wait a litle less)
+									//TODO: is a NOP wait (delay_ms) better than a busy wait (while(1))?
+				}
 			}
 		}
 	}
