@@ -255,6 +255,10 @@ int main() {
 	printf_P(PSTR("STARTING\r\n"));
 
 	while (1) {
+		//delay_ms(500);
+		//uint32_t t = get_interval_ms();
+		//printf_P(PSTR("timer: %lu ms\r\n"), t);
+
 		//Wait for button press
 		if ((PINC & (1 << TRIGGER_PIN)) == 0) {
 
@@ -291,7 +295,7 @@ int main() {
 						//while waiting for next intervalometer click, flash a green LED to show it is still on
 						if (the_time_ms > 0 && (the_time_ms % 5000 == 0)) {		//turn on every 5 seconds
 							PORTB |= (1 << TIMER_INDICATOR_LED_PIN);
-							delay_ms(200);	//putting delay here is OK since the min time between click()s is 15 seconds (TIMER0 still ticks during this delay)
+							delay_ms(200);
 							PORTB &= ~(1 << TIMER_INDICATOR_LED_PIN);
 						}
 					}
