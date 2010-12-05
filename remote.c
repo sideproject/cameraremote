@@ -24,12 +24,12 @@ void click();
 // PC0 -- Potentiometer for selecting interval
 // PB1 -- Intervaolmeter indicator LED - flashes while waiting for next interval click
 
-#define TRIGGER_PIN 			PC5
+#define TRIGGER_PIN 			PD2
 #define IR_LED_PIN 				PC4
 #define IR_INDICATOR_LED_PIN 	PC3
-#define TIMER_INDICATOR_LED_PIN	PB1
-#define MODE_SWITCH_PIN 		PC2
-#define POTENTIOMETER_PIN 		PC0
+#define TIMER_INDICATOR_LED_PIN	PC2
+#define MODE_SWITCH_PIN 		PC1
+#define POTENTIOMETER_PIN 		PC5
 
 enum MODES {
 	INTERVALOMETER = 0,
@@ -80,7 +80,7 @@ SIGNAL(SIG_OUTPUT_COMPARE0A) {
 
 void adc_init() {
 	// set analog to digital converter for external reference (5v), single ended input ADC0
-	ADMUX = 0;
+	ADMUX = 5;
 
 	// set analog to digital converter to be enabled, with a clock prescale of 1/128
 	// so that the ADC clock runs at 115.2kHz.
@@ -237,10 +237,10 @@ int main() {
 	// LEDs as outputs
 	DDRC |= (1 << IR_LED_PIN);
 	DDRC |= (1 << IR_INDICATOR_LED_PIN);
-	DDRB |= (1 << TIMER_INDICATOR_LED_PIN);
+	DDRC |= (1 << TIMER_INDICATOR_LED_PIN);
 
 	//enable internal pullup resistors
-	PORTC |= (1 << TRIGGER_PIN);
+	PORTD |= (1 << TRIGGER_PIN);
 	PORTC |= (1 << MODE_SWITCH_PIN);
 	PORTC |= (1 << POTENTIOMETER_PIN);
 
@@ -260,7 +260,7 @@ int main() {
 		//printf_P(PSTR("timer: %lu ms\r\n"), t);
 
 		//Wait for button press
-		if ((PINC & (1 << TRIGGER_PIN)) == 0) {
+		if ((PIND & (1 << TRIGGER_PIN)) == 0) {
 
 			//Check mode switch
 			if ((PINC & (1 << MODE_SWITCH_PIN)) == 0)
@@ -294,9 +294,9 @@ int main() {
 					} else {
 						//while waiting for next intervalometer click, flash a green LED to show it is still on
 						if (the_time_ms > 0 && (the_time_ms % 5000 == 0)) {		//turn on every 5 seconds
-							PORTB |= (1 << TIMER_INDICATOR_LED_PIN);
+							PORTC |= (1 << TIMER_INDICATOR_LED_PIN);
 							delay_ms(200);
-							PORTB &= ~(1 << TIMER_INDICATOR_LED_PIN);
+							PORTC &= ~(1 << TIMER_INDICATOR_LED_PIN);
 						}
 					}
 					delay_ms(8); 	//TIMER0 ticks every 10ms - wait ~1 tick (nerdkit crystal is slow so wait a litle less)
