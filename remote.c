@@ -10,6 +10,7 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <inttypes.h>
+#include <avr/sleep.h>
 
 #include "../libnerdkits/delay.h"
 #include "../libnerdkits/uart.h"
@@ -17,19 +18,12 @@
 void click();
 
 // PIN DEFINITIONS:
-// PC5 -- trigger button (pulled to ground when pressed)
-// PC4 -- IR LED anode
-// PC3 -- Indicator LED anode (turns on when IR LED is flashing)
-// PC2 -- Mode switch
-// PC0 -- Potentiometer for selecting interval
-// PB1 -- Intervaolmeter indicator LED - flashes while waiting for next interval click
-
-#define TRIGGER_PIN 			PD2
-#define IR_LED_PIN 				PC4
-#define IR_INDICATOR_LED_PIN 	PC3
-#define TIMER_INDICATOR_LED_PIN	PC2
-#define MODE_SWITCH_PIN 		PC1
-#define POTENTIOMETER_PIN 		PC5
+#define TRIGGER_PIN 			PD2	//trigger button (pulled to ground when pressed)
+#define IR_LED_PIN 				PC4	//IR LED anode
+#define IR_INDICATOR_LED_PIN 	PC3	//Intervaolmeter indicator LED - flashes while waiting for next interval click
+#define TIMER_INDICATOR_LED_PIN	PC2	//Indicator LED anode (turns on when IR LED is flashing)
+#define MODE_SWITCH_PIN 		PC1	//Mode switch
+#define POTENTIOMETER_PIN 		PC5	//Potentiometer for selecting interval
 
 enum MODES {
 	INTERVALOMETER = 0,
@@ -53,10 +47,13 @@ enum CAMERA_TYPES {
 //
 // But with "volatile", it will always read it from memory
 // instead of making that assumption.
-volatile int32_t the_time_ms = 0;
-int32_t timer_interval_ms = 0;
+volatile int32_t timer_interval_ms = 0UL;
+volatile uint32_t the_time_ms = 0UL;
+volatile uint8_t remainder_counter = 0U;
+volatile int32_t count_down_ms = 5000L;
+volatile uint8_t fire = 0U;
 
-void realtimeclock_setup() {
+/*void realtimeclock_setup() {
 	// setup Timer0:
 	//   CTC (Clear Timer on Compare Match mode)
 	//   TOP set by OCR0A register
@@ -76,7 +73,8 @@ void realtimeclock_setup() {
 SIGNAL(SIG_OUTPUT_COMPARE0A) {
 	//add 10 instead of 1 because the event happens every .01 seconds and we need to track every .001 seconds
 	the_time_ms += 10;
-}
+}*/
+
 
 void adc_init() {
 	// set analog to digital converter for external reference (5v), single ended input ADC0
@@ -110,53 +108,103 @@ uint16_t adc_read() {
 
 uint16_t get_sample() {
 
-	uint16_t sample_avg = 0;
-	uint16_t sample = 0;
-	uint8_t i = 0;
+	uint16_t sample_avg = 0U;
+	uint16_t sample = 0U;
+	uint8_t i = 0U;
 
 	// take 100 samples and average them
-	for (i=0; i<100; i++) {
+	for (i=0U; i<100U; i++) {
 		sample = adc_read();
-		sample_avg = sample_avg + (sample / 100);
+		sample_avg = sample_avg + (sample / 100U);
 	}
 	return sample_avg;
 }
-/*
-uint32_t account_for_slow_clock(uint32_t ms) {
-	//printf_P(PSTR("1Converting %lu ms\r\n"), ms);
-	uint32_t us = ms * 1000;	//convert to us
-	//printf_P(PSTR("2Converting %lu us\r\n"), us);
-	us = us - (us * 0.017);		//account for slow clock
-	//printf_P(PSTR("3Converting %lu us\r\n"), us);
-	//printf_P(PSTR("4Converting %lu ms\r\n"), us/1000);
-	return us / 1000;			//convert back to ms
-}
-*/
 
 uint32_t get_interval_ms() {
-	uint32_t interval = 0;
+
+	uint32_t interval = 0U;
 	uint16_t sample = get_sample();
 
 	//Decide on the interval time.
-	if (sample <= 128)
-		interval = 15000; 	// 15 ses
-	else if (sample <= 256)
-		interval = 30000; 	// 30 sec
-	else if (sample <= 384)
-		interval = 60000; 	// 1 min
-	else if (sample <= 512)
-		interval = 120000; 	// 2 min
-	else if (sample <= 640)
-		interval = 180000; 	// 3 min
-	else if (sample <= 768)
-		interval = 300000; 	// 5 min
-	else if (sample <= 896)
-		interval = 600000; 	// 10 min
+	if (sample <= 128U)
+		interval = 15000U; 	// 15 ses
+	else if (sample <= 256U)
+		interval = 30000U; 	// 30 sec
+	else if (sample <= 384U)
+		interval = 60000U; 	// 1 min
+	else if (sample <= 512U)
+		interval = 120000U; 	// 2 min
+	else if (sample <= 640U)
+		interval = 180000U; 	// 3 min
+	else if (sample <= 768U)
+		interval = 300000U; 	// 5 min
+	else if (sample <= 896U)
+		interval = 600000U; 	// 10 min
 	else
-		interval = 900000; 	// 15 min
+		interval = 900000U; 	// 15 min
 
 	return interval;
 }
+
+void SetupTimer2(){
+
+	//Timer2 Settings: Timer Prescaler /1024, mode 0
+	TCCR2A = 0;
+	TCCR2B = 1<<CS22 | 1<<CS21 | 1<<CS20; //set 1024 prescaler
+	//TCCR2B = 1<<CS22 | 1<<CS20 | 0<<CS20; //set 256 prescaler
+	//TCCR2B = 1<<CS22 | 1<<CS20 | 1<<CS20; //set 128 prescaler
+	//TCCR2B = 1<<CS22 | 0<<CS21 | 0<<CS20; //set 64 prescaler
+	//TCCR2B = 0<<CS22 | 1<<CS21 | 1<<CS20; //set 32 prescaler
+	//TCCR2B = 0<<CS22 | 1<<CS21 | 0<<CS20; //set 8 prescaler
+
+	//Timer2 Overflow Interrupt Enable
+	TIMSK2 = 1<<TOIE2;
+
+	//load the timer for its first cycle
+	TCNT2=0;
+}
+
+//Timer2 overflow interrupt vector handler
+ISR(TIMER2_OVF_vect) {
+	//prescaler math: http://www.atmel.com/dyn/resources/prod_documents/doc2505.pdf	
+	//(14,745,600 / 1024) / 256 = 56.25 (divide by 256 because timer2 is an 8bit timer)
+	//there will be 56.25 overflows each second
+	//1,000ms / 56.25 overflows = 17.7778ms each overflow
+	
+	remainder_counter++;
+	the_time_ms += 17UL; //we can't add 17.7778
+	count_down_ms -= 17L;
+	
+	//56.25 * 17.7778 = 1000ms
+	//for each overflow, we gain 17ms (17 * 56 = 952), we need to make up the difference
+	//for each 57th (56.25) overflow, make up the difference of 48ms
+	if (remainder_counter >= 57U) {
+		the_time_ms += 44UL;
+		count_down_ms -= 44L;
+		
+		remainder_counter = 0U;
+	}
+}
+
+// this code will be called anytime that PCINT18 switches (hi to lo, or lo to hi)
+ISR(PCINT2_vect) {
+	if (mode == REMOTE) {
+		click();
+		set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+		cli();
+		sleep_enable();
+		sei();
+		sleep_cpu();
+		sleep_disable();
+		sei();
+	} else if (mode == INTERVALOMETER) {
+		timer_interval_ms = get_interval_ms();
+		the_time_ms = 0UL;
+		remainder_counter = 0U;
+		count_down_ms = 5000UL;
+	}
+}
+
 
 
 void pulse_32k() {
@@ -167,9 +215,9 @@ void pulse_32k() {
 	// [increase 31us to 32us to divide by 2 evenly ]
 	// [ 32us / 2 = 16us ]
 	PORTC |= (1 << IR_LED_PIN);		//ON
-	delay_us(16);
+	delay_us(16U);
 	PORTC &= ~(1 << IR_LED_PIN);	//OFF
-	delay_us(16);
+	delay_us(16U);
 }
 
 void pulse_38k() {
@@ -178,31 +226,31 @@ void pulse_38k() {
 	// [ 2.6041666EE-5s ~= 26us ]
 	// [ 26us / 2 = 13 us]
 	PORTC |= (1 << IR_LED_PIN);		//ON
-	delay_us(13);
+	delay_us(13U);
 	PORTC &= ~(1 << IR_LED_PIN);	//OFF
-	delay_us(13);
+	delay_us(13U);
 }
 
 void pulse_38k_us(uint16_t us) { 	//max us=65535 (2 ^ 16)
-	uint16_t times = us / 26; 		// one pulse takes 26us -> 13us on and 13us off
-	uint16_t i = 0;
-	for (i = 0; i < times; i++)
+	uint16_t times = us / 26U; 		// one pulse takes 26us -> 13us on and 13us off
+	uint16_t i = 0U;
+	for (i = 0U; i < times; i++)
 		pulse_38k();
 }
 
 void nikon_click() {
 	//send the shutter release signal to the camera [---NIKON CAMERAS---]
 	// Fire Pattern Twice with IR LED
-	uint8_t j = 0;
-	for (j = 0; j < 2; j++) {
-		pulse_38k_us(2002);   	//Wait for a start pulse (2000 usec)  [2000 / 26 = 76.9 -> 2002 / 26 = 77]
-		delay_us(27830); 		//- There must be no pulse for 27830 usec (pause)
-		pulse_38k_us(390);   	//- Receive a pulse (390 usec) [390 / 26 = 15]
-		delay_us(1580);  		//- Pause (1580 usec)
-		pulse_38k_us(416);   	//- Receive a second pulse (410 usec) [410 / 26 = 15.7 -> 416 / 26 = 16]
-		delay_us(3580);  		//- Longer pause (3580 usec)
-		pulse_38k_us(390);   	//- Receive the last pulse (400 usec) [400 / 26 = 15.3 -> 390 / 26 = 15]
-		delay_us(63200); 		//The same waveform is repeated a second time after about 63,2 msec.
+	uint8_t j = 0U;
+	for (j = 0U; j < 2U; j++) {
+		pulse_38k_us(2002U);   	//Wait for a start pulse (2000 usec)  [2000 / 26 = 76.9 -> 2002 / 26 = 77]
+		delay_us(27830U); 		//- There must be no pulse for 27830 usec (pause)
+		pulse_38k_us(390U);   	//- Receive a pulse (390 usec) [390 / 26 = 15]
+		delay_us(1580U);  		//- Pause (1580 usec)
+		pulse_38k_us(416U);   	//- Receive a second pulse (410 usec) [410 / 26 = 15.7 -> 416 / 26 = 16]
+		delay_us(3580U);  		//- Longer pause (3580 usec)
+		pulse_38k_us(390U);   	//- Receive the last pulse (400 usec) [400 / 26 = 15.3 -> 390 / 26 = 15]
+		delay_us(63200U); 		//The same waveform is repeated a second time after about 63,2 msec.
 	}
 }
 
@@ -210,12 +258,12 @@ void canon_click() {
 	//send the shutter release signal to the camera [---CANON CAMERAS---]
 	//This pattern is untested because I didn't have a Canon camera to use, but according to online
 	//documentation this *should* work for a Canon camera that has IR remote capabilities.
-	uint8_t i, j = 0;
+	uint8_t i, j = 0U;
 	// Fire Pattern Twice with IR LED
-	for (i = 0; i < 2; i++) {
-		for (j = 0; j < 16; j++) pulse_32k();	//16 pulses @ 32KHz
-		delay_us(7210);     					//pause 7.21 ms [7.21ms * 1000 = 7210us]
-		for (j = 0; j < 16; j++) pulse_32k();	//16 pulses @ 32KHz
+	for (i = 0U; i < 2U; i++) {
+		for (j = 0U; j < 16U; j++) pulse_32k();	//16 pulses @ 32KHz
+		delay_us(7210U);     					//pause 7.21 ms [7.21ms * 1000 = 7210us]
+		for (j = 0U; j < 16U; j++) pulse_32k();	//16 pulses @ 32KHz
 	}
 }
 
@@ -232,6 +280,16 @@ void click() {
 	PORTC &= ~(1 << IR_INDICATOR_LED_PIN); //turn off indicator LED
 }
 
+void blink_timer_led_times(uint16_t times) {
+	uint16_t x = 0U;
+	for (x = 0U; x < times; x++) {
+		PORTC |= (1 << TIMER_INDICATOR_LED_PIN);
+		delay_ms(200U);
+		PORTC &= ~(1 << TIMER_INDICATOR_LED_PIN);
+		delay_ms(200U);
+	}
+}
+
 int main() {
 
 	// LEDs as outputs
@@ -240,9 +298,18 @@ int main() {
 	DDRC |= (1 << TIMER_INDICATOR_LED_PIN);
 
 	//enable internal pullup resistors
-	PORTD |= (1 << TRIGGER_PIN);
 	PORTC |= (1 << MODE_SWITCH_PIN);
 	PORTC |= (1 << POTENTIOMETER_PIN);
+	PORTD |= (1 << TRIGGER_PIN);
+	
+	// Pin change interrupt control register - enables interrupt vectors
+	// Bit 2 = enable PC vector 2 (PCINT23..16)
+	// Bit 1 = enable PC vector 1 (PCINT14..8)
+	// Bit 0 = enable PC vector 0 (PCINT7..0)
+	PCICR |= (1 << PCIE2);
+
+	// Pin change mask registers decide which pins are enabled as triggers
+	PCMSK2 |= (1 << PCINT18);
 
 	adc_init();
 
@@ -250,60 +317,58 @@ int main() {
 	uart_init();
 	FILE uart_stream = FDEV_SETUP_STREAM(uart_putchar, uart_getchar, _FDEV_SETUP_RW);
 	stdin = stdout = &uart_stream;
-	delay_ms(333);
 
 	printf_P(PSTR("STARTING\r\n"));
-
+	
+	//Check mode switch
+	if ((PINC & (1 << MODE_SWITCH_PIN)) == 0) {
+		mode = REMOTE;
+		blink_timer_led_times(1U);
+	} else {
+		mode = INTERVALOMETER;
+		blink_timer_led_times(2U);
+		SetupTimer2();
+		timer_interval_ms = get_interval_ms();
+	}
+	delay_ms(500U);
+	
+	printf_P(PSTR("Mode %u ms\r\n"), mode);
+	
 	while (1) {
-		//delay_ms(500);
-		//uint32_t t = get_interval_ms();
-		//printf_P(PSTR("timer: %lu ms\r\n"), t);
+		if (mode == INTERVALOMETER) {
+		
+			set_sleep_mode(SLEEP_MODE_PWR_SAVE);		
+			cli();
+			sleep_enable();
+			sei();
+			sleep_cpu();
+			sleep_disable();
+			sei();
 
-		//Wait for button press
-		if ((PIND & (1 << TRIGGER_PIN)) == 0) {
-
-			//Check mode switch
-			if ((PINC & (1 << MODE_SWITCH_PIN)) == 0)
-				mode = REMOTE;
-			else
-				mode = INTERVALOMETER;
-
-			if (mode == REMOTE) {
+			if (the_time_ms >= timer_interval_ms) {
+				the_time_ms = 0UL;
+				remainder_counter = 0UL;
 				click();
-				printf_P(PSTR("CLICK_REMOTE\r\n"));
-
-				//debounce
-				delay_ms(1000);
-
-			} else if (mode == INTERVALOMETER) {
-
-				timer_interval_ms = get_interval_ms();
-				printf_P(PSTR("INTERVALOMETER_START: %lu ms\r\n"), timer_interval_ms);
-
-				click();
-
-				realtimeclock_setup();
-				sei(); //turn on interrupt handler
-
-				while (1) {
-
-					if (the_time_ms >= timer_interval_ms) {
-						the_time_ms = 0;
-						click();
-						printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
-					} else {
-						//while waiting for next intervalometer click, flash a green LED to show it is still on
-						if (the_time_ms > 0 && (the_time_ms % 5000 == 0)) {		//turn on every 5 seconds
-							PORTC |= (1 << TIMER_INDICATOR_LED_PIN);
-							delay_ms(200);
-							PORTC &= ~(1 << TIMER_INDICATOR_LED_PIN);
-						}
-					}
-					delay_ms(8); 	//TIMER0 ticks every 10ms - wait ~1 tick (nerdkit crystal is slow so wait a litle less)
-									//TODO: is a NOP wait (delay_ms) better than a busy wait (while(1))?
+				count_down_ms = 5000UL;
+				printf_P(PSTR("Waiting for: %lu ms\r\n"), timer_interval_ms);
+			} else {		
+				//while waiting for next intervalometer click, flash a green LED to show it is still on
+				if (the_time_ms > 0UL && (count_down_ms <= 0L)) {		//turn on every 5 seconds
+					count_down_ms = 5000UL;
+					blink_timer_led_times(1U);
 				}
 			}
 		}
+		else {
+			set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+			cli();
+			sleep_enable();
+			sei();
+			sleep_cpu();
+			sleep_disable();
+			sei();
+		}
 	}
+	
 	return 0;
 }
